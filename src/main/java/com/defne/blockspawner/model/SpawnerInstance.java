@@ -19,7 +19,7 @@ public class SpawnerInstance {
         this.z = z;
         this.typeId = typeId;
         this.owner = owner;
-        this.level = Math.max(1, Math.min(5, level));
+        this.level = Math.max(1, level);
         this.nextSpawnMillis = System.currentTimeMillis();
     }
 
@@ -37,6 +37,6 @@ public class SpawnerInstance {
     public long nextSpawnMillis() { return nextSpawnMillis; }
 
     public void setTypeId(String typeId) { this.typeId = typeId; }
-    public void setLevel(int level) { this.level = Math.max(1, Math.min(5, level)); }
+    public void setLevel(int level) { this.level = Math.max(1, level); }
     public void setNextSpawnMillis(long nextSpawnMillis) { this.nextSpawnMillis = nextSpawnMillis; }
 }
