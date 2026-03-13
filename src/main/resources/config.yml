@@ -29,9 +29,6 @@ language: tr
 
 debug: false
 
-gui:
-  create-cost: 15000
-
 levels:
   max-level: 5
   scaling:
