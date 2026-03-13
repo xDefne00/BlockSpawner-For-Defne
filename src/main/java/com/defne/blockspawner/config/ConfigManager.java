@@ -115,9 +115,6 @@ public class ConfigManager {
         return plugin.getConfig().getBoolean("break.drop-item", true);
     }
 
-    public double getCreateSpawnerCost() {
-        return Math.max(0.0D, plugin.getConfig().getDouble("gui.create-cost", 15000.0D));
-    }
 
     public int getMaxLevel() {
         return Math.max(1, plugin.getConfig().getInt("levels.max-level", 5));
