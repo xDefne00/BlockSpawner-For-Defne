@@ -2,6 +2,7 @@ package com.defne.blockspawner.service;
 
 import com.defne.blockspawner.BlockSpawnerPlugin;
 import com.defne.blockspawner.model.SpawnerType;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
@@ -20,14 +21,18 @@ public class SpawnerItemService {
     }
 
     public ItemStack createSpawnerItem(SpawnerType type, int amount, int level) {
+        return createSpawnerItem(type.id(), type.id(), amount, level);
+    }
+
+    public ItemStack createSpawnerItem(String storedTypeId, String displayName, int amount, int level) {
         ItemStack item = new ItemStack(Material.SPAWNER, amount);
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {
             return item;
         }
-        meta.getPersistentDataContainer().set(typeKey, PersistentDataType.STRING, type.id());
-        meta.getPersistentDataContainer().set(levelKey, PersistentDataType.INTEGER, Math.max(1, Math.min(5, level)));
-        meta.displayName(net.kyori.adventure.text.Component.text("§b" + type.id().toUpperCase() + " Block Spawner §7[L" + level + "]"));
+        meta.getPersistentDataContainer().set(typeKey, PersistentDataType.STRING, storedTypeId);
+        meta.getPersistentDataContainer().set(levelKey, PersistentDataType.INTEGER, Math.max(1, level));
+        meta.displayName(Component.text("§b" + displayName + " Block Spawner §7[L" + Math.max(1, level) + "]"));
         item.setItemMeta(meta);
         return item;
     }
@@ -56,6 +61,6 @@ public class SpawnerItemService {
         if (level == null) {
             return 1;
         }
-        return Math.max(1, Math.min(5, level));
+        return Math.max(1, level);
     }
 }
