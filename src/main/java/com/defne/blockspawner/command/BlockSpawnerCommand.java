@@ -3,7 +3,6 @@ package com.defne.blockspawner.command;
 import com.defne.blockspawner.BlockSpawnerPlugin;
 import com.defne.blockspawner.model.SpawnerInstance;
 import com.defne.blockspawner.model.SpawnerType;
-import com.defne.blockspawner.service.GuiService;
 import com.defne.blockspawner.service.MessageService;
 import com.defne.blockspawner.service.SpawnerItemService;
 import com.defne.blockspawner.service.SpawnerService;
@@ -28,28 +27,21 @@ public class BlockSpawnerCommand implements CommandExecutor, TabCompleter {
     private final SpawnerService spawnerService;
     private final SpawnerItemService itemService;
     private final MessageService messageService;
-    private final GuiService guiService;
 
     public BlockSpawnerCommand(BlockSpawnerPlugin plugin, SpawnerService spawnerService,
-                               SpawnerItemService itemService, MessageService messageService, GuiService guiService) {
+                               SpawnerItemService itemService, MessageService messageService) {
         this.plugin = plugin;
         this.spawnerService = spawnerService;
         this.itemService = itemService;
         this.messageService = messageService;
-        this.guiService = guiService;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
-            if (sender instanceof Player player) {
-                guiService.openMain(player);
-                return true;
-            }
             sender.sendMessage("§e/blockspawner give <player> <type> <amount>");
             sender.sendMessage("§e/blockspawner reload");
             sender.sendMessage("§e/blockspawner remove <radius>");
-            sender.sendMessage("§e/blockspawner list");
             sender.sendMessage("§e/blockspawner upgrade");
             return true;
         }
@@ -59,7 +51,6 @@ public class BlockSpawnerCommand implements CommandExecutor, TabCompleter {
             case "give" -> handleGive(sender, args);
             case "reload" -> handleReload(sender);
             case "remove" -> handleRemove(sender, args);
-            case "list" -> handleList(sender);
             case "upgrade" -> handleUpgrade(sender);
             default -> false;
         };
@@ -146,19 +137,6 @@ public class BlockSpawnerCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    private boolean handleList(CommandSender sender) {
-        Map<String, SpawnerType> types = plugin.getConfigManager().getSpawnerTypes();
-        if (types.isEmpty()) {
-            sender.sendMessage(messageService.get("no-types"));
-            return true;
-        }
-        sender.sendMessage(messageService.get("list-header"));
-        for (SpawnerType type : types.values()) {
-            sender.sendMessage("§7- §f" + type.id() + " §8(§f" + type.dropMaterial() + "§8, §f" + type.intervalSeconds() + "s§8, §fx" + type.amountPerCycle() + "§8)");
-        }
-        return true;
-    }
-
     private boolean handleUpgrade(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(messageService.get("player-only"));
@@ -184,7 +162,7 @@ public class BlockSpawnerCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return List.of("give", "reload", "remove", "list", "upgrade");
+            return List.of("give", "reload", "remove", "upgrade");
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("give")) {
             return Bukkit.getOnlinePlayers().stream().map(Player::getName).toList();
