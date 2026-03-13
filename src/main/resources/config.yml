@@ -1,0 +1,23 @@
+# BlockSpawner default configuration
+storage:
+  type: SQLITE
+  file: blockspawners.db
+
+# Optional global behaviour controls
+global:
+  # Max amount of drops processed per async scan cycle
+  max-spawn-per-cycle: 500
+
+blockspawners:
+  diamond:
+    material: DIAMOND
+    interval: 10
+    amount: 2
+  gold:
+    material: GOLD_INGOT
+    interval: 6
+    amount: 2
+  iron:
+    material: IRON_INGOT
+    interval: 4
+    amount: 3
