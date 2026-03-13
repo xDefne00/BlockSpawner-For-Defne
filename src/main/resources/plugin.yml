@@ -7,6 +7,7 @@ softdepend:
   - Vault
   - SuperiorSkyblock2
   - SlimeWorldManager
+  - DecentHolograms
 commands:
   blockspawner:
     description: Main BlockSpawner command

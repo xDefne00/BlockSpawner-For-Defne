@@ -5,8 +5,16 @@ storage:
 
 # Optional global behaviour controls
 global:
-  # Max amount of drops processed per async scan cycle
+  # Max amount of spawners processed per async scan cycle.
   max-spawn-per-cycle: 500
+
+# Placement limits
+limits:
+  per-player: 200
+  per-chunk: 50
+
+# Optional debug output in console
+debug: false
 
 blockspawners:
   diamond:

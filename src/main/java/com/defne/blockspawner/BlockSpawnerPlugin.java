@@ -4,17 +4,17 @@ import com.defne.blockspawner.command.BlockSpawnerCommand;
 import com.defne.blockspawner.config.ConfigManager;
 import com.defne.blockspawner.listener.ChunkStateListener;
 import com.defne.blockspawner.listener.SpawnerBlockListener;
+import com.defne.blockspawner.service.HologramService;
 import com.defne.blockspawner.service.SpawnerItemService;
 import com.defne.blockspawner.service.SpawnerService;
 import com.defne.blockspawner.service.StorageService;
+import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.World;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
-
-import net.milkbowl.vault.economy.Economy;
 
 import java.io.File;
 import java.sql.SQLException;
@@ -24,6 +24,7 @@ public class BlockSpawnerPlugin extends JavaPlugin {
     private StorageService storageService;
     private SpawnerService spawnerService;
     private SpawnerItemService spawnerItemService;
+    private HologramService hologramService;
     private Economy economy;
 
     @Override
@@ -47,7 +48,9 @@ public class BlockSpawnerPlugin extends JavaPlugin {
         }
 
         spawnerItemService = new SpawnerItemService(this);
-        spawnerService = new SpawnerService(this, configManager, storageService);
+        hologramService = new HologramService(this, configManager);
+        hologramService.initialize();
+        spawnerService = new SpawnerService(this, configManager, storageService, hologramService);
         spawnerService.start();
 
         Bukkit.getPluginManager().registerEvents(new SpawnerBlockListener(this, spawnerService, spawnerItemService), this);
@@ -60,6 +63,7 @@ public class BlockSpawnerPlugin extends JavaPlugin {
             command.setTabCompleter(executor);
         }
 
+        // Load in-memory state for already-loaded chunks during /reload startup scenarios.
         for (World world : Bukkit.getWorlds()) {
             for (Chunk chunk : world.getLoadedChunks()) {
                 spawnerService.onChunkLoaded(world.getName(), chunk.getX(), chunk.getZ());
@@ -74,6 +78,7 @@ public class BlockSpawnerPlugin extends JavaPlugin {
     public void onDisable() {
         if (spawnerService != null) {
             spawnerService.stop();
+            spawnerService.clearRuntimeState();
         }
         if (storageService != null) {
             storageService.shutdown();

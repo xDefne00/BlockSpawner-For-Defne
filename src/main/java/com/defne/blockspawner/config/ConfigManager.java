@@ -54,6 +54,18 @@ public class ConfigManager {
         return Math.max(1, plugin.getConfig().getInt("global.max-spawn-per-cycle", 500));
     }
 
+    public int getPerPlayerLimit() {
+        return Math.max(1, plugin.getConfig().getInt("limits.per-player", 200));
+    }
+
+    public int getPerChunkLimit() {
+        return Math.max(1, plugin.getConfig().getInt("limits.per-chunk", 50));
+    }
+
+    public boolean isDebug() {
+        return plugin.getConfig().getBoolean("debug", false);
+    }
+
     public String getStorageFile() {
         return plugin.getConfig().getString("storage.file", "blockspawners.db");
     }
