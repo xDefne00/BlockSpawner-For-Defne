@@ -1,0 +1,18 @@
+name: BlockSpawner
+version: 1.0.0
+main: com.defne.blockspawner.BlockSpawnerPlugin
+api-version: '1.21'
+authors: [Defne]
+softdepend:
+  - Vault
+  - SuperiorSkyblock2
+  - SlimeWorldManager
+commands:
+  blockspawner:
+    description: Main BlockSpawner command
+    usage: /blockspawner
+    aliases: [bspawner, bsp]
+permissions:
+  blockspawner.admin:
+    description: Access admin commands and bypass owner restrictions
+    default: op
