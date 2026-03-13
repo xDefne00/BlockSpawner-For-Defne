@@ -87,6 +87,7 @@ public class BlockSpawnerCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         plugin.getConfigManager().load();
+        spawnerService.refreshHolograms();
         sender.sendMessage("§aBlockSpawner config reloaded.");
         return true;
     }
