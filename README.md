@@ -33,5 +33,4 @@ blockspawners:
     material: IRON_INGOT
     interval: 4
     amount: 3
-```# BlockSpawner-For-Defne
-deneme plugin testi
+```
