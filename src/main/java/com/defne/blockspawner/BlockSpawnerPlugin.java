@@ -3,8 +3,11 @@ package com.defne.blockspawner;
 import com.defne.blockspawner.command.BlockSpawnerCommand;
 import com.defne.blockspawner.config.ConfigManager;
 import com.defne.blockspawner.listener.ChunkStateListener;
+import com.defne.blockspawner.listener.GuiListener;
 import com.defne.blockspawner.listener.SpawnerBlockListener;
+import com.defne.blockspawner.service.GuiService;
 import com.defne.blockspawner.service.HologramService;
+import com.defne.blockspawner.service.MessageService;
 import com.defne.blockspawner.service.SpawnerItemService;
 import com.defne.blockspawner.service.SpawnerService;
 import com.defne.blockspawner.service.StorageService;
@@ -25,6 +28,8 @@ public class BlockSpawnerPlugin extends JavaPlugin {
     private SpawnerService spawnerService;
     private SpawnerItemService spawnerItemService;
     private HologramService hologramService;
+    private MessageService messageService;
+    private GuiService guiService;
     private Economy economy;
 
     @Override
@@ -32,6 +37,9 @@ public class BlockSpawnerPlugin extends JavaPlugin {
         saveDefaultConfig();
         configManager = new ConfigManager(this);
         configManager.load();
+
+        messageService = new MessageService(this);
+        messageService.load(configManager.getLanguage());
 
         File dbFile = new File(getDataFolder(), configManager.getStorageFile());
         if (!dbFile.getParentFile().exists() && !dbFile.getParentFile().mkdirs()) {
@@ -50,20 +58,21 @@ public class BlockSpawnerPlugin extends JavaPlugin {
         spawnerItemService = new SpawnerItemService(this);
         hologramService = new HologramService(this, configManager);
         hologramService.initialize();
-        spawnerService = new SpawnerService(this, configManager, storageService, hologramService);
+        spawnerService = new SpawnerService(this, configManager, storageService, hologramService, messageService);
         spawnerService.start();
+        guiService = new GuiService(this, configManager, spawnerService, spawnerItemService, messageService);
 
-        Bukkit.getPluginManager().registerEvents(new SpawnerBlockListener(this, spawnerService, spawnerItemService), this);
+        Bukkit.getPluginManager().registerEvents(new SpawnerBlockListener(this, spawnerService, spawnerItemService, messageService), this);
         Bukkit.getPluginManager().registerEvents(new ChunkStateListener(spawnerService), this);
+        Bukkit.getPluginManager().registerEvents(new GuiListener(this, guiService), this);
 
         PluginCommand command = getCommand("blockspawner");
         if (command != null) {
-            BlockSpawnerCommand executor = new BlockSpawnerCommand(this, spawnerService, spawnerItemService);
+            BlockSpawnerCommand executor = new BlockSpawnerCommand(this, spawnerService, spawnerItemService, messageService, guiService);
             command.setExecutor(executor);
             command.setTabCompleter(executor);
         }
 
-        // Load in-memory state for already-loaded chunks during /reload startup scenarios.
         for (World world : Bukkit.getWorlds()) {
             for (Chunk chunk : world.getLoadedChunks()) {
                 spawnerService.onChunkLoaded(world.getName(), chunk.getX(), chunk.getZ());
@@ -98,6 +107,14 @@ public class BlockSpawnerPlugin extends JavaPlugin {
 
     public ConfigManager getConfigManager() {
         return configManager;
+    }
+
+    public MessageService getMessageService() {
+        return messageService;
+    }
+
+    public GuiService getGuiService() {
+        return guiService;
     }
 
     public Economy getEconomy() {
