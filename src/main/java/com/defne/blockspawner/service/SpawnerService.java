@@ -4,6 +4,7 @@ import com.defne.blockspawner.BlockSpawnerPlugin;
 import com.defne.blockspawner.config.ConfigManager;
 import com.defne.blockspawner.model.SpawnerInstance;
 import com.defne.blockspawner.model.SpawnerType;
+import com.defne.blockspawner.util.CustomSpawnerCodec;
 import com.defne.blockspawner.util.LocationKey;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -18,6 +19,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -29,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class SpawnerService {
-    private static final BlockFace[] PREFERRED_INSERT_ORDER = {
+    private static final BlockFace[] CONTAINER_FACES = {
             BlockFace.DOWN, BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.UP
     };
 
@@ -37,19 +39,23 @@ public class SpawnerService {
     private final ConfigManager configManager;
     private final StorageService storageService;
     private final HologramService hologramService;
+    private final MessageService messageService;
+
     private final ConcurrentHashMap<LocationKey, SpawnerInstance> loadedSpawners = new ConcurrentHashMap<>();
     private final Set<String> loadedChunks = ConcurrentHashMap.newKeySet();
     private BukkitTask scanTask;
 
-    public SpawnerService(BlockSpawnerPlugin plugin, ConfigManager configManager, StorageService storageService, HologramService hologramService) {
+    public SpawnerService(BlockSpawnerPlugin plugin, ConfigManager configManager, StorageService storageService,
+                          HologramService hologramService, MessageService messageService) {
         this.plugin = plugin;
         this.configManager = configManager;
         this.storageService = storageService;
         this.hologramService = hologramService;
+        this.messageService = messageService;
     }
 
     public void start() {
-        // Async loop only selects due tasks from in-memory state (no Bukkit world/block calls).
+        // Async loop only selects due tasks from in-memory data.
         scanTask = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, this::scanSpawnersAsync, 20L, 20L);
     }
 
@@ -60,7 +66,7 @@ public class SpawnerService {
     }
 
     public boolean registerSpawner(Location location, String typeId, UUID owner, int level) {
-        SpawnerType type = configManager.getType(typeId);
+        SpawnerType type = resolveType(typeId);
         if (type == null || location.getWorld() == null) {
             return false;
         }
@@ -76,11 +82,13 @@ public class SpawnerService {
             return false;
         }
 
-        SpawnerInstance instance = new SpawnerInstance(key.world(), key.x(), key.y(), key.z(), type.id(), owner, level);
+        SpawnerInstance instance = new SpawnerInstance(
+                key.world(), key.x(), key.y(), key.z(), typeId, owner,
+                Math.max(1, Math.min(level, configManager.getMaxLevel()))
+        );
         loadedSpawners.put(key, instance);
         storageService.upsertAsync(instance);
         hologramService.createOrUpdate(instance);
-        debug("Registered spawner " + key.serialized());
         return true;
     }
 
@@ -96,7 +104,6 @@ public class SpawnerService {
         }
         storageService.deleteAsync(key.world(), key.x(), key.y(), key.z());
         hologramService.remove(key);
-        debug("Removed spawner " + key.serialized());
         return true;
     }
 
@@ -105,9 +112,48 @@ public class SpawnerService {
         if (instance == null) {
             return false;
         }
-        instance.setLevel(level);
+        instance.setLevel(Math.max(1, Math.min(level, configManager.getMaxLevel())));
         storageService.upsertAsync(instance);
         hologramService.createOrUpdate(instance);
+        return true;
+    }
+
+    public boolean tryUpgrade(Player player, SpawnerInstance instance) {
+        if (instance.level() >= configManager.getMaxLevel()) {
+            player.sendMessage(messageService.get("max-level"));
+            return false;
+        }
+
+        if (configManager.isAllowOwnerOnly() && !canBreak(player, instance)) {
+            player.sendMessage(messageService.get("not-owner"));
+            return false;
+        }
+
+        if (plugin.getEconomy() == null) {
+            player.sendMessage(messageService.get("economy-unavailable"));
+            return false;
+        }
+
+        double cost = configManager.getUpgradeCost(instance.level());
+        if (plugin.getEconomy().getBalance(player) < cost) {
+            player.sendMessage(messageService.format("not-enough-money", java.util.Map.of("cost", String.valueOf((long) cost))));
+            return false;
+        }
+
+        var response = plugin.getEconomy().withdrawPlayer(player, cost);
+        if (!response.transactionSuccess()) {
+            player.sendMessage(messageService.get("upgrade-failed"));
+            return false;
+        }
+
+        World world = Bukkit.getWorld(instance.world());
+        if (world == null) {
+            player.sendMessage(messageService.get("upgrade-failed"));
+            return false;
+        }
+
+        setSpawnerLevel(new Location(world, instance.x(), instance.y(), instance.z()), instance.level() + 1);
+        player.sendMessage(messageService.format("upgrade-success", java.util.Map.of("level", String.valueOf(instance.level()))));
         return true;
     }
 
@@ -136,11 +182,11 @@ public class SpawnerService {
     }
 
     public ItemStack toItem(SpawnerInstance instance, SpawnerItemService itemService) {
-        SpawnerType type = configManager.getType(instance.typeId());
+        SpawnerType type = resolveType(instance.typeId());
         if (type == null) {
             return new ItemStack(Material.SPAWNER);
         }
-        return itemService.createSpawnerItem(type, 1, instance.level());
+        return itemService.createSpawnerItem(instance.typeId(), getDisplayName(instance.typeId()), 1, instance.level());
     }
 
     public Collection<SpawnerInstance> getLoadedSpawners() {
@@ -159,6 +205,7 @@ public class SpawnerService {
             List<SpawnerInstance> fromDb = storageService.loadChunk(world, chunkX, chunkZ);
             Bukkit.getScheduler().runTask(plugin, () -> {
                 for (SpawnerInstance instance : fromDb) {
+                    instance.setLevel(Math.min(instance.level(), configManager.getMaxLevel()));
                     LocationKey key = new LocationKey(instance.world(), instance.x(), instance.y(), instance.z());
                     loadedSpawners.put(key, instance);
                     hologramService.createOrUpdate(instance);
@@ -211,7 +258,7 @@ public class SpawnerService {
     private void processDueSync(List<SpawnerInstance> due) {
         long now = System.currentTimeMillis();
         for (SpawnerInstance instance : due) {
-            SpawnerType type = configManager.getType(instance.typeId());
+            SpawnerType type = resolveType(instance.typeId());
             if (type == null) {
                 continue;
             }
@@ -222,33 +269,43 @@ public class SpawnerService {
             }
 
             Location spawnerLocation = new Location(world, instance.x(), instance.y(), instance.z());
-            ItemStack toSpawn = new ItemStack(type.dropMaterial(), type.amountPerCycle());
+            int spawnAmount = getSpawnAmount(type, instance.level());
+            ItemStack stack = new ItemStack(type.dropMaterial(), spawnAmount);
 
-            // First pass: prefer hoppers/containers around the spawner to reduce dropped entities.
-            ItemStack remainder = insertIntoNearbyContainers(spawnerLocation, toSpawn);
-            if (remainder.getAmount() > 0) {
-                // Second pass: try owner inventory when online.
-                Player owner = Bukkit.getPlayer(instance.owner());
-                if (owner != null && owner.isOnline()) {
-                    remainder = addToInventory(owner.getInventory(), remainder);
+            ConfigManager.DropMode mode = configManager.getDropMode();
+            if (mode == ConfigManager.DropMode.NATURAL) {
+                dropNaturally(spawnerLocation, stack);
+            } else if (mode == ConfigManager.DropMode.INVENTORY) {
+                ItemStack left = addToOwnerInventory(instance.owner(), stack);
+                if (left.getAmount() > 0) {
+                    dropNaturally(spawnerLocation, left);
+                }
+            } else {
+                ItemStack left = insertIntoNearbyContainers(spawnerLocation, stack);
+                if (left.getAmount() > 0) {
+                    dropNaturally(spawnerLocation, left);
                 }
             }
-            if (remainder.getAmount() > 0) {
-                // Final pass: merge into nearby dropped stacks before creating a new item entity.
-                mergeOrDrop(spawnerLocation.clone().add(0.5, 1.2, 0.5), remainder);
-            }
 
-            long next = now + Math.max(1000L, (long) (type.intervalSeconds() * 1000L * intervalMultiplier(instance.level())));
-            instance.setNextSpawnMillis(next);
+            long next = now + (long) (getSpawnIntervalSeconds(type, instance.level()) * 1000L);
+            instance.setNextSpawnMillis(Math.max(now + 1000L, next));
             hologramService.createOrUpdate(instance);
         }
+    }
+
+    private ItemStack addToOwnerInventory(UUID ownerId, ItemStack stack) {
+        Player owner = Bukkit.getPlayer(ownerId);
+        if (owner == null || !owner.isOnline()) {
+            return stack;
+        }
+        return addToInventory(owner.getInventory(), stack);
     }
 
     private ItemStack insertIntoNearbyContainers(Location spawnerLocation, ItemStack input) {
         ItemStack remainder = input.clone();
         Block origin = spawnerLocation.getBlock();
 
-        for (BlockFace face : PREFERRED_INSERT_ORDER) {
+        for (BlockFace face : CONTAINER_FACES) {
             if (remainder.getAmount() <= 0) {
                 break;
             }
@@ -271,7 +328,12 @@ public class SpawnerService {
         return leftovers.values().iterator().next();
     }
 
-    private void mergeOrDrop(Location dropLocation, ItemStack stack) {
+    private void dropNaturally(Location spawnerLocation, ItemStack stack) {
+        Location dropLocation = spawnerLocation.clone().add(0.5, configManager.getDropHeight(), 0.5);
+        if (configManager.isRandomOffsetEnabled()) {
+            dropLocation.add((Math.random() - 0.5D) * 0.30D, 0, (Math.random() - 0.5D) * 0.30D);
+        }
+
         int maxStack = stack.getMaxStackSize();
         for (Item nearbyItem : dropLocation.getWorld().getNearbyEntitiesByType(Item.class, dropLocation, 1.4, 1.0, 1.4)) {
             ItemStack nearbyStack = nearbyItem.getItemStack();
@@ -288,20 +350,40 @@ public class SpawnerService {
             }
         }
 
-        dropLocation.getWorld().dropItemNaturally(dropLocation, stack);
+        Item dropped = dropLocation.getWorld().dropItemNaturally(dropLocation, stack);
+        dropped.setPickupDelay(configManager.getPickupDelay());
+        dropped.setVelocity(new Vector(0, 0, 0));
     }
 
-    private double intervalMultiplier(int level) {
-        return Math.max(0.30D, 1.0D - ((Math.max(1, level) - 1) * 0.15D));
+    public int getSpawnAmount(SpawnerType type, int level) {
+        return (int) Math.max(1, Math.floor(type.amountPerCycle() * Math.pow(configManager.getAmountMultiplier(), Math.max(0, level - 1))));
+    }
+
+    public double getSpawnIntervalSeconds(SpawnerType type, int level) {
+        return Math.max(1.0D, type.intervalSeconds() * Math.pow(configManager.getIntervalMultiplier(), Math.max(0, level - 1)));
+    }
+
+
+    public SpawnerType resolveType(String typeId) {
+        SpawnerType configured = configManager.getType(typeId);
+        if (configured != null) {
+            return configured;
+        }
+        return CustomSpawnerCodec.toSpawnerType(typeId, "custom");
+    }
+
+    public String getDisplayName(String typeId) {
+        return CustomSpawnerCodec.decode(typeId)
+                .map(CustomSpawnerCodec.DecodedCustomSpawner::name)
+                .orElseGet(() -> {
+                    if (typeId == null || typeId.isEmpty()) {
+                        return "Spawner";
+                    }
+                    return typeId.substring(0, 1).toUpperCase() + typeId.substring(1).toLowerCase();
+                });
     }
 
     private String chunkKey(String world, int chunkX, int chunkZ) {
         return world + ":" + chunkX + ":" + chunkZ;
-    }
-
-    private void debug(String message) {
-        if (configManager.isDebug()) {
-            plugin.getLogger().info("[DEBUG] " + message);
-        }
     }
 }
