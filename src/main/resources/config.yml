@@ -3,18 +3,50 @@ storage:
   type: SQLITE
   file: blockspawners.db
 
-# Optional global behaviour controls
 global:
-  # Max amount of spawners processed per async scan cycle.
   max-spawn-per-cycle: 500
 
-# Placement limits
 limits:
   per-player: 200
   per-chunk: 50
 
-# Optional debug output in console
+break:
+  require-silk-touch: true
+  allow-owner-only: true
+  drop-item: true
+
+# NATURAL | INVENTORY | HYBRID
+# NATURAL: always natural drop
+# INVENTORY: owner inventory first, remaining amount drops naturally
+# HYBRID: nearby containers first, remaining amount drops naturally
+drop:
+  mode: NATURAL
+  height: 1.2
+  pickup-delay: 10
+  random-offset: true
+
+language: tr
+
 debug: false
+
+gui:
+  create-cost: 15000
+
+levels:
+  max-level: 5
+  scaling:
+    interval-multiplier: 0.85
+    amount-multiplier: 1.2
+  upgrade-cost:
+    1: 10000
+    2: 25000
+    3: 50000
+    4: 100000
+
+hologram:
+  - "&b%type% Spawner"
+  - "&7Level: &f%level%"
+  - "&a+%amount% / %interval%s"
 
 blockspawners:
   diamond:
