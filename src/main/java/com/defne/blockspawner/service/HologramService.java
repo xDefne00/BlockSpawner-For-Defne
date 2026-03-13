@@ -4,8 +4,10 @@ import com.defne.blockspawner.BlockSpawnerPlugin;
 import com.defne.blockspawner.config.ConfigManager;
 import com.defne.blockspawner.model.SpawnerInstance;
 import com.defne.blockspawner.model.SpawnerType;
+import com.defne.blockspawner.util.CustomSpawnerCodec;
 import com.defne.blockspawner.util.LocationKey;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.plugin.Plugin;
@@ -13,6 +15,7 @@ import org.bukkit.plugin.Plugin;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -61,10 +64,6 @@ public class HologramService {
         }
     }
 
-    public boolean isAvailable() {
-        return available;
-    }
-
     public void createOrUpdate(SpawnerInstance instance) {
         if (!available) {
             return;
@@ -81,11 +80,9 @@ public class HologramService {
             Object hologram = getMethod.invoke(null, hologramId);
             if (hologram == null) {
                 createMethod.invoke(null, hologramId, location, false, lines);
-                debug("Created hologram " + hologramId);
                 return;
             }
             setLinesMethod.invoke(null, hologram, lines);
-            debug("Updated hologram " + hologramId);
         } catch (ReflectiveOperationException ex) {
             plugin.getLogger().warning("Failed to create/update hologram " + hologramId + ": " + ex.getMessage());
         }
@@ -101,7 +98,6 @@ public class HologramService {
         }
         try {
             removeMethod.invoke(null, id);
-            debug("Removed hologram " + id);
         } catch (ReflectiveOperationException ex) {
             plugin.getLogger().warning("Failed to remove hologram " + id + ": " + ex.getMessage());
         }
@@ -121,13 +117,25 @@ public class HologramService {
     private List<String> buildLines(SpawnerInstance instance) {
         SpawnerType type = configManager.getType(instance.typeId());
         if (type == null) {
+            type = CustomSpawnerCodec.toSpawnerType(instance.typeId(), "custom");
+        }
+        if (type == null) {
             return List.of("§cUnknown Spawner", "§7Level: " + instance.level(), "§7+0 / 0s");
         }
-        return List.of(
-                "§b" + type.id().toUpperCase() + " Spawner",
-                "§eLevel: " + instance.level(),
-                "§a+" + type.amountPerCycle() + " / " + type.intervalSeconds() + "s"
-        );
+
+        int effectiveAmount = (int) Math.max(1, Math.floor(type.amountPerCycle() * Math.pow(configManager.getAmountMultiplier(), instance.level() - 1)));
+        int effectiveInterval = Math.max(1, (int) Math.round(type.intervalSeconds() * Math.pow(configManager.getIntervalMultiplier(), instance.level() - 1)));
+
+        List<String> lines = new ArrayList<>();
+        for (String line : configManager.getHologramFormat()) {
+            String parsed = line
+                    .replace("%type%", CustomSpawnerCodec.decode(instance.typeId()).map(CustomSpawnerCodec.DecodedCustomSpawner::name).orElse(toDisplay(type.id())))
+                    .replace("%level%", String.valueOf(instance.level()))
+                    .replace("%amount%", String.valueOf(effectiveAmount))
+                    .replace("%interval%", String.valueOf(effectiveInterval));
+            lines.add(ChatColor.translateAlternateColorCodes('&', parsed));
+        }
+        return lines;
     }
 
     private Location hologramLocation(LocationKey key) {
@@ -140,6 +148,11 @@ public class HologramService {
 
     private String hologramId(LocationKey key) {
         return "blockspawner_" + key.serialized().replace(':', '_');
+    }
+
+    private String toDisplay(String raw) {
+        String spaced = raw.replace('_', ' ');
+        return spaced.substring(0, 1).toUpperCase(Locale.ROOT) + spaced.substring(1).toLowerCase(Locale.ROOT);
     }
 
     private void debug(String message) {
