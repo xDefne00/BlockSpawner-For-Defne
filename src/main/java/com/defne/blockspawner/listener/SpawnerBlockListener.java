@@ -44,12 +44,30 @@ public class SpawnerBlockListener implements Listener {
         SpawnerType type = plugin.getConfigManager().getType(typeId);
         if (type == null) {
             event.setCancelled(true);
+            event.getPlayer().sendMessage("§cInvalid spawner type in item.");
             return;
         }
 
-        boolean created = spawnerService.registerSpawner(event.getBlockPlaced().getLocation(), type.id(), event.getPlayer().getUniqueId(), itemService.getLevel(used));
+        Player player = event.getPlayer();
+        int chunkX = event.getBlockPlaced().getX() >> 4;
+        int chunkZ = event.getBlockPlaced().getZ() >> 4;
+
+        if (spawnerService.getSpawnerCountByOwner(player.getUniqueId()) >= plugin.getConfigManager().getPerPlayerLimit()) {
+            event.setCancelled(true);
+            player.sendMessage("§cYou reached your spawner limit (" + plugin.getConfigManager().getPerPlayerLimit() + ").");
+            return;
+        }
+
+        if (spawnerService.getSpawnerCountByChunk(event.getBlockPlaced().getWorld().getName(), chunkX, chunkZ) >= plugin.getConfigManager().getPerChunkLimit()) {
+            event.setCancelled(true);
+            player.sendMessage("§cThis chunk reached the spawner limit (" + plugin.getConfigManager().getPerChunkLimit() + ").");
+            return;
+        }
+
+        boolean created = spawnerService.registerSpawner(event.getBlockPlaced().getLocation(), type.id(), player.getUniqueId(), itemService.getLevel(used));
         if (!created) {
             event.setCancelled(true);
+            player.sendMessage("§cCould not place this block spawner.");
         }
     }
 
